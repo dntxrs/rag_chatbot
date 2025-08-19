@@ -1,0 +1,9 @@
+python-telegram-bot==21.0.1
+google-generativeai
+supabase
+PyMuPDF
+Pillow
+nest-asyncio
+langchain
+python-docx
+fpdf2

@@ -196,9 +196,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Harap tunggu, proses lain sedang berjalan.")
         return
     supabase.table('documents').delete().eq('user_id', user_id).eq('file_name', file_name).execute()
-    file_path = f"/content/{doc.file_id}_{file_name}"
-    new_file = await context.bot.get_file(doc.file_id)
+    save_directory = "/content/"
+
+    # 1. Baris ini ditambahkan untuk membuat folder secara otomatis
+    os.makedirs(save_directory, exist_ok=True)
+
+    # 2. Baris ini ditambahkan untuk menggabungkan folder dan nama file
+    # (Ganti 'new_file.file_name' jika variabel nama filenya berbeda)
+    file_path = os.path.join(save_directory, new_file.file_name)
+
+    # 3. Baris asli (baris 201) ini tetap ada, tidak diubah
     await new_file.download_to_drive(file_path)
+
     start_time = time.time()
     await update.message.reply_text(f"Memproses '<code>{html.escape(file_name)}</code>'. Gunakan /cancel untuk membatalkan jika proses lama.", parse_mode=ParseMode.HTML)
     file_extension = ""

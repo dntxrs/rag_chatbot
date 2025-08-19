@@ -13,6 +13,7 @@
 
 # 1. IMPORT PUSTAKA
 import os
+from dotenv import load_dotenv
 import asyncio
 import io
 import html
@@ -33,10 +34,10 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 nest_asyncio.apply()
 
 # 2. KONFIGURASI DAN INISIALISASI
-TELEGRAM_BOT_TOKEN = userdata.get('TELEGRAM_BOT_TOKEN')
-GEMINI_API_KEY = userdata.get('GEMINI_API_KEY')
-SUPABASE_URL = userdata.get('SUPABASE_URL')
-SUPABASE_KEY = userdata.get('SUPABASE_KEY')
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
 if not all([TELEGRAM_BOT_TOKEN, GEMINI_API_KEY, SUPABASE_URL, SUPABASE_KEY]):
     raise ValueError("Satu atau lebih secret tidak ditemukan di Colab Secrets.")
@@ -295,16 +296,6 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e: await update.message.reply_text(f"Gagal membuat PDF: {e}")
 
 async def list_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... (kode fungsi ini sama, tidak perlu diubah)
-async def delete_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... (kode fungsi ini sama, tidak perlu diubah)
-async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... (kode fungsi ini sama, tidak perlu diubah)
-async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... (kode fungsi ini sama, tidak perlu diubah)
-
-# (Untuk keringkasan, saya salin lagi di bawah ini agar Anda bisa copy-paste langsung)
-async def list_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     try:
         response = supabase.table('documents').select('file_name').eq('user_id', user_id).execute()
@@ -339,7 +330,6 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Tidak ada proses unggah yang sedang berjalan.")
 
 
-# 5. FUNGSI UTAMA UNTUK MENJALANKAN BOT
 def main():
     print("Bot versi final (dengan fitur fokus) sedang disiapkan...")
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()

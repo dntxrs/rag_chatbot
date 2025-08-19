@@ -261,7 +261,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     waiting_message = await update.message.reply_text('Memahami pertanyaan Anda...')
     try:
         history_text = "\n".join([f"User: {h['question']}\nBot: {h['answer']}" for h in context.user_data.get('history', [])])
-        refine_prompt = f"Riwayat percakapan:\n{history_text}\n\nPertanyaan pengguna: \"{question}\"\nTugas Anda:\n1. Analisis pertanyaan pengguna. Jika ambigu, tulis ulang menjadi versi yang lebih jelas.\n2. Jika hanya satu atau dua kata, ubah menjadi pertanyaan lengkap. Contoh: 'RAG' -> 'Jelaskan tentang RAG'.\n3. Jika sudah jelas, kembalikan apa adanya.\nHanya kembalikan teks pertanyaan final."
+        refine_prompt = f"..." # (Gunakan prompt Anda yang sudah ada)
         refined_question_response = generative_model.generate_content(refine_prompt)
         refined_question = refined_question_response.text.strip()
         
@@ -271,24 +271,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         relevant_chunks = find_relevant_chunks(refined_question, user_id, focused_file)
         
         if not relevant_chunks:
-            await waiting_message.edit_text('Maaf, saya tidak dapat menemukan informasi spesifik mengenai itu di dokumen Anda. Silakan coba pertanyaan lain.')
+            await waiting_message.edit_text('Maaf, saya tidak dapat menemukan informasi spesifik mengenai itu di dokumen Anda.')
             return
 
         final_answer = generate_answer(refined_question, relevant_chunks, context.user_data['history']).strip()
         
         safe_answer = escape_markdown_v2(final_answer)
-
         citations = f"\n\n\\-\\-\\-\n*Sumber Informasi:*\n"
 
+        # ===== PERUBAHAN UTAMA DI DALAM LOOP INI =====
         for chunk in relevant_chunks:
             safe_filename = escape_markdown_v2(chunk['file_name'])
             safe_snippet = escape_markdown_v2(chunk['content'][:80].replace("\n", " "))
             page_number = chunk['page_number']
             similarity = chunk['similarity'] * 100
             
-            # ===== PERBAIKAN UTAMA DI SINI =====
-            citations += f"• `{safe_filename}`, Hal\\. {page_number} \\(*Kemiripan: {similarity:.2f}%*\\): \"_{safe_snippet}..._\"\n"
-            # ====================================
+            # 1. Format angka menjadi string terlebih dahulu
+            similarity_str = f"{similarity:.2f}"
+            # 2. "Bersihkan" string angka yang mengandung titik
+            safe_similarity_str = escape_markdown_v2(similarity_str)
+
+            # 3. Gunakan variabel yang sudah aman di dalam f-string
+            citations += f"• `{safe_filename}`, Hal\\. {page_number} \\(*Kemiripan: {safe_similarity_str}%*\\): \"_{safe_snippet}..._\"\n"
         
         full_response = safe_answer + citations
 

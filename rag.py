@@ -246,13 +246,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # GANTI FUNGSI HANDLE_MESSAGE ANDA DENGAN YANG INI
 
+# GANTI FUNGSI LAMA ANDA DENGAN VERSI FINAL INI
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     question = update.message.text
 
     response = supabase.table('documents').select('id').eq('user_id', user_id).limit(1).execute()
     if not response.data:
-        panduan_awal_text = "Halo! Sepertinya Anda belum mengunggah dokumen apa pun.\n\nSilakan **unggah file PDF, DOCX, atau TXT** terlebih dahulu agar saya bisa menjawab pertanyaan Anda."
+        panduan_awal_text = "Halo! Sepertinya Anda belum mengunggah dokumen apa pun.\n\nSilakan <b>unggah file PDF, DOCX, atau TXT</b> terlebih dahulu agar saya bisa menjawab pertanyaan Anda."
         await update.message.reply_text(panduan_awal_text, parse_mode=ParseMode.HTML)
         return
         
@@ -276,23 +278,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         final_answer = generate_answer(refined_question, relevant_chunks, context.user_data['history']).strip()
         
-        safe_answer = escape_markdown_v2(final_answer)
-        citations = f"\n\n\\-\\-\\-\n*Sumber Informasi:*\n"
+        # Mengamankan jawaban untuk format HTML
+        safe_answer = html.escape(final_answer)
 
-        # ===== PERUBAHAN UTAMA DI DALAM LOOP INI =====
+        # Kembali menggunakan format sitasi HTML
+        citations = "\n\n--- \n<b>Sumber Informasi:</b>\n"
         for chunk in relevant_chunks:
-            safe_filename = escape_markdown_v2(chunk['file_name'])
-            safe_snippet = escape_markdown_v2(chunk['content'][:80].replace("\n", " "))
+            safe_filename = html.escape(chunk['file_name'])
+            safe_snippet = html.escape(chunk['content'][:80].replace("\n", " "))
             page_number = chunk['page_number']
             similarity = chunk['similarity'] * 100
             
-            # 1. Format angka menjadi string terlebih dahulu
-            similarity_str = f"{similarity:.2f}"
-            # 2. "Bersihkan" string angka yang mengandung titik
-            safe_similarity_str = escape_markdown_v2(similarity_str)
-
-            # 3. Gunakan variabel yang sudah aman di dalam f-string
-            citations += f"• `{safe_filename}`, Hal\\. {page_number} \\(*Kemiripan: {safe_similarity_str}%*\\): \"_{safe_snippet}..._\"\n"
+            citations += f"• <code>{safe_filename}</code>, Hal. {page_number} (<b>Kemiripan: {similarity:.2f}%</b>): \"<i>{safe_snippet}...</i>\"\n"
         
         full_response = safe_answer + citations
 
@@ -301,7 +298,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await waiting_message.delete()
         
-        await update.message.reply_text(full_response, parse_mode=ParseMode.MARKDOWN_V2)
+        # Kembali menggunakan ParseMode.HTML
+        await update.message.reply_text(full_response, parse_mode=ParseMode.HTML)
 
     except Exception as e:
         try:
@@ -310,7 +308,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"Gagal menghapus pesan tunggu: {delete_err}")
         
         error_message = f"Terjadi kesalahan: {str(e)}"
-        await update.message.reply_text(escape_markdown_v2(error_message), parse_mode=ParseMode.MARKDOWN_V2)
+        await update.message.reply_text(html.escape(error_message))
 
 async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)

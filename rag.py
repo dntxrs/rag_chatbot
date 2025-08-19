@@ -278,9 +278,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         safe_answer = escape_markdown_v2(final_answer)
 
-        # ===== PERBAIKAN UTAMA DI SINI =====
         citations = f"\n\n\\-\\-\\-\n*Sumber Informasi:*\n"
-        # ====================================
 
         for chunk in relevant_chunks:
             safe_filename = escape_markdown_v2(chunk['file_name'])
@@ -288,7 +286,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             page_number = chunk['page_number']
             similarity = chunk['similarity'] * 100
             
-            citations += f"• `{safe_filename}`, Hal\\. {page_number} (*Kemiripan: {similarity:.2f}%*): \"_{safe_snippet}..._\"\n"
+            # ===== PERBAIKAN UTAMA DI SINI =====
+            citations += f"• `{safe_filename}`, Hal\\. {page_number} \\(*Kemiripan: {similarity:.2f}%*\\): \"_{safe_snippet}..._\"\n"
+            # ====================================
         
         full_response = safe_answer + citations
 
@@ -300,13 +300,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(full_response, parse_mode=ParseMode.MARKDOWN_V2)
 
     except Exception as e:
-        # Hapus pesan tunggu di blok except
         try:
             await waiting_message.delete()
         except Exception as delete_err:
             print(f"Gagal menghapus pesan tunggu: {delete_err}")
         
-        # Kirim pesan error yang aman
         error_message = f"Terjadi kesalahan: {str(e)}"
         await update.message.reply_text(escape_markdown_v2(error_message), parse_mode=ParseMode.MARKDOWN_V2)
 

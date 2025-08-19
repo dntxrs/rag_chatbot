@@ -6,4 +6,5 @@ Pillow
 nest-asyncio
 langchain
 python-docx
+python-dotenv
 fpdf2

@@ -192,24 +192,25 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     doc = update.message.document
     file_name = doc.file_name
+    
     if context.user_data.get('processing_task') and not context.user_data['processing_task'].done():
         await update.message.reply_text("Harap tunggu, proses lain sedang berjalan.")
         return
+
+    # Hapus data lama dengan nama file yang sama
     supabase.table('documents').delete().eq('user_id', user_id).eq('file_name', file_name).execute()
-    save_directory = "/content/"
 
-    # 1. Baris ini ditambahkan untuk membuat folder secara otomatis
-    os.makedirs(save_directory, exist_ok=True)
-
-    # 2. Baris ini ditambahkan untuk menggabungkan folder dan nama file
-    # (Ganti 'new_file.file_name' jika variabel nama filenya berbeda)
-    file_path = os.path.join(save_directory, new_file.file_name)
-
-    # 3. Baris asli (baris 201) ini tetap ada, tidak diubah
+    # ===== PERBAIKAN UTAMA DI SINI =====
+    # Menghapus /content/ agar file disimpan di direktori kerja saat ini
+    file_path = f"{doc.file_id}_{file_name}"
+    # ====================================
+    
+    new_file = await context.bot.get_file(doc.file_id)
     await new_file.download_to_drive(file_path)
-
+    
     start_time = time.time()
     await update.message.reply_text(f"Memproses '<code>{html.escape(file_name)}</code>'. Gunakan /cancel untuk membatalkan jika proses lama.", parse_mode=ParseMode.HTML)
+    
     file_extension = ""
     try:
         file_extension = file_name.split('.')[-1].lower()
@@ -218,6 +219,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             task = asyncio.create_task(process_and_store_pdf(update, context, file_path, file_name, user_id, start_time))
             context.user_data['processing_task'] = task
             return
+
         full_text = ""
         if file_extension == 'docx':
             document = docx.Document(file_path)
@@ -225,18 +227,22 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif file_extension == 'txt':
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 full_text = f.read()
+
         if not full_text.strip():
             await update.message.reply_text("Dokumen ini tidak berisi teks yang bisa diproses.")
             return
+
         chunks = text_splitter.split_text(full_text)
         content_to_process = [{'content': chunk} for chunk in chunks]
         await chunk_and_embed_content(update, context, content_to_process, file_name, user_id)
         duration = time.time() - start_time
         await update.message.reply_text(f"✅ Dokumen '<code>{html.escape(file_name)}</code>' berhasil diproses dalam {duration:.2f} detik.", parse_mode=ParseMode.HTML)
-    except Exception as e: await update.message.reply_text(f"Gagal memproses file: {e}")
+
+    except Exception as e:
+        await update.message.reply_text(f"Gagal memproses file: {e}")
     finally:
         if file_extension != 'pdf' and os.path.exists(file_path):
-            os.remove(file_path)
+            os.remove(file_path)h)
 
 # GANTI FUNGSI HANDLE_MESSAGE ANDA DENGAN YANG INI
 

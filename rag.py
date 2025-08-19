@@ -29,7 +29,12 @@ from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import nest_asyncio
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import re
 
+def escape_markdown_v2(text: str) -> str:
+    """Fungsi untuk "melindungi" karakter khusus di MarkdownV2."""
+    escape_chars = r'\_*[]()~`>#+-=|{}.!'
+    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 nest_asyncio.apply()
 
 # 2. KONFIGURASI DAN INISIALISASI
@@ -224,49 +229,70 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if file_extension != 'pdf' and os.path.exists(file_path):
             os.remove(file_path)
 
+# GANTI FUNGSI HANDLE_MESSAGE ANDA DENGAN YANG INI
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     question = update.message.text
+
+    # --- (Bagian Pengecekan Dokumen, dll. tetap sama) ---
     response = supabase.table('documents').select('id').eq('user_id', user_id).limit(1).execute()
     if not response.data:
         panduan_awal_text = "Halo! Sepertinya Anda belum mengunggah dokumen apa pun.\n\nSilakan **unggah file PDF, DOCX, atau TXT** terlebih dahulu agar saya bisa menjawab pertanyaan Anda."
         await update.message.reply_text(panduan_awal_text, parse_mode=ParseMode.HTML)
         return
     if 'history' not in context.user_data: context.user_data['history'] = []
+    
     waiting_message = await update.message.reply_text('Memahami pertanyaan Anda...')
     try:
+        # --- (Bagian Query Transformation tetap sama) ---
         history_text = "\n".join([f"User: {h['question']}\nBot: {h['answer']}" for h in context.user_data.get('history', [])])
-        refine_prompt = f"Riwayat percakapan:\n{history_text}\n\nPertanyaan pengguna: \"{question}\"\nTugas Anda:\n1. Analisis pertanyaan pengguna. Jika ambigu, tulis ulang menjadi versi yang lebih jelas.\n2. Jika hanya satu atau dua kata, ubah menjadi pertanyaan lengkap. Contoh: 'RAG' -> 'Jelaskan tentang RAG'.\n3. Jika sudah jelas, kembalikan apa adanya.\nHanya kembalikan teks pertanyaan final."
+        refine_prompt = f"..." # (Prompt Anda di sini)
         refined_question_response = generative_model.generate_content(refine_prompt)
         refined_question = refined_question_response.text.strip()
+        
         await waiting_message.edit_text(f"Mencari informasi untuk: '{refined_question}'...")
-
+        
         focused_file = context.user_data.get('focused_document')
         relevant_chunks = find_relevant_chunks(refined_question, user_id, focused_file)
-
+        
         if not relevant_chunks:
             await waiting_message.edit_text('Maaf, saya tidak dapat menemukan informasi spesifik mengenai itu di dokumen Anda. Silakan coba pertanyaan lain.')
             return
 
+        # --- (Bagian Generate Answer tetap sama) ---
         final_answer = generate_answer(refined_question, relevant_chunks, context.user_data['history']).strip()
+        
+        # ===== PERUBAHAN UTAMA DIMULAI DARI SINI =====
+        
+        # "Bersihkan" jawaban dari Gemini agar aman untuk MarkdownV2
+        safe_answer = escape_markdown_v2(final_answer)
 
-        safe_answer = html.escape(final_answer)
-        # ===== PERBAIKAN UTAMA DI SINI (HAPUS BACKSLASH GANDA) =====
-        citations = "\n\n--- \n<b>Sumber Informasi:</b>\n"
+        # Buat string sitasi menggunakan format Markdown, bukan HTML
+        citations = f"\n\n---\n*Sumber Informasi:*\n"
         for chunk in relevant_chunks:
-            similarity_percentage = chunk['similarity'] * 100
-            safe_snippet = html.escape(chunk['content'][:80])
-            citations += f"• <code>{html.escape(chunk['file_name'])}</code>, Hal. {chunk['page_number']} (<b>Kemiripan: {similarity_percentage:.2f}%</b>): \"<i>{safe_snippet}...</i>\"\n"
-
+            # "Bersihkan" semua teks yang berasal dari luar
+            safe_filename = escape_markdown_v2(chunk['file_name'])
+            safe_snippet = escape_markdown_v2(chunk['content'][:80].replace("\n", " "))
+            page_number = chunk['page_number']
+            similarity = chunk['similarity'] * 100
+            
+            citations += f"• `{safe_filename}`, Hal\. {page_number} (*Kemiripan: {similarity:.2f}%*): \"_{safe_snippet}..._\"\n"
+        
         full_response = safe_answer + citations
+
+        # Simpan riwayat seperti biasa
         context.user_data['history'].append({'question': refined_question, 'answer': final_answer})
         context.user_data['history'] = context.user_data['history'][-5:]
-
+        
         await waiting_message.delete()
-        await update.message.reply_text(full_response, parse_mode=ParseMode.HTML)
+        
+        # Kirim pesan dengan PARSE MODE MARKDOWN_V2
+        await update.message.reply_text(full_response, parse_mode=ParseMode.MARKDOWN_V2)
+
     except Exception as e:
         await waiting_message.delete()
-        await update.message.reply_text(f'Terjadi kesalahan kritis: {e}')
+        await update.message.reply_text(f'Terjadi kesalahan kritis: {escape_markdown_v2(str(e))}', parse_mode=ParseMode.MARKDOWN_V2)
 
 async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)

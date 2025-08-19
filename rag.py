@@ -242,7 +242,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Gagal memproses file: {e}")
     finally:
         if file_extension != 'pdf' and os.path.exists(file_path):
-            os.remove(file_path)h)
+            os.remove(file_path)
 
 # GANTI FUNGSI HANDLE_MESSAGE ANDA DENGAN YANG INI
 

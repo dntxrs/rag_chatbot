@@ -51,24 +51,52 @@ text_splitter = RecursiveCharacterTextSplitter(
 )
 
 # 3. DEFINISI FUNGSI-FUNGSI INTI
-async def chunk_and_embed_content(update: Update, context: ContextTypes.DEFAULT_TYPE, content_list: list, file_name: str, user_id: str):
-    BATCH_SIZE = 128
-    all_batches_items = [content_list[i:i + BATCH_SIZE] for i in range(0, len(content_list), BATCH_SIZE)]
-    progress_msg = await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Mengoptimalkan {len(all_batches_items)} batch untuk di-embed...")
-    embedding_tasks = [genai.embed_content(model=embedding_model_name, content=[item['content'] for item in batch], task_type="RETRIEVAL_DOCUMENT") for batch in all_batches_items]
-    all_embedding_results = await asyncio.gather(*embedding_tasks)
-    await progress_msg.edit_text("Semua embedding berhasil dibuat. Menyimpan ke database...")
-    rows_to_insert = []
-    for i, batch_result in enumerate(all_embedding_results):
-        batch_items = all_batches_items[i]
-        for j, item in enumerate(batch_items):
-            rows_to_insert.append({'content': item['content'], 'page_number': item.get('page', 1), 'embedding': batch_result['embedding'][j], 'file_name': file_name, 'user_id': user_id})
-    if rows_to_insert:
-        DB_BATCH_SIZE = 200
-        for i in range(0, len(rows_to_insert), DB_BATCH_SIZE):
-            supabase.table('documents').insert(rows_to_insert[i:i+DB_BATCH_SIZE]).execute()
-    await progress_msg.delete()
+# GANTI FUNGSI LAMA ANDA DENGAN VERSI STABIL INI
 
+async def chunk_and_embed_content(update: Update, context: ContextTypes.DEFAULT_TYPE, content_list: list, file_name: str, user_id: str):
+    """
+    Fungsi generik untuk chunking, embedding, dan penyimpanan
+    yang dioptimalkan untuk batch size besar dan stabilitas.
+    """
+    # Gunakan BATCH_SIZE besar untuk mengurangi jumlah panggilan API
+    BATCH_SIZE = 128
+    total_chunks = len(content_list)
+    
+    # Kembali menggunakan loop sekuensial yang lebih stabil
+    for i in range(0, total_chunks, BATCH_SIZE):
+        batch_items = content_list[i:i + BATCH_SIZE]
+        
+        # Kirim update progres ke pengguna
+        progress_msg = f"Memproses potongan {i+1}-{min(i+BATCH_SIZE, total_chunks)} dari {total_chunks}..."
+        # Gunakan try-except untuk edit pesan agar tidak error jika pesan sama
+        try:
+            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=context.user_data['progress_message_id'], text=progress_msg)
+        except Exception:
+            # Jika gagal (misal, pesan tidak berubah), kirim pesan baru
+            sent_message = await context.bot.send_message(chat_id=update.effective_chat.id, text=progress_msg)
+            context.user_data['progress_message_id'] = sent_message.message_id
+
+        # Lakukan panggilan API untuk satu batch
+        embedding_results = await genai.embed_content(
+            model=embedding_model_name,
+            content=[item['content'] for item in batch_items],
+            task_type="RETRIEVAL_DOCUMENT"
+        )
+        
+        # Siapkan data untuk dimasukkan ke database
+        rows_to_insert = [{
+            'content': item['content'],
+            'page_number': item.get('page', 1),
+            'embedding': embedding_results['embedding'][j],
+            'file_name': file_name,
+            'user_id': user_id
+        } for j, item in enumerate(batch_items)]
+        
+        # Masukkan data ke Supabase
+        if rows_to_insert:
+            supabase.table('documents').insert(rows_to_insert).execute()
+        
+        await asyncio.sleep(0.1) # Jeda kecil antar batch
 async def process_and_store_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE, pdf_path: str, file_name: str, user_id: str, start_time: float):
     try:
         all_content_to_process = []

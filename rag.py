@@ -27,7 +27,6 @@ from supabase import create_client, Client
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from google.colab import userdata
 import nest_asyncio
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 

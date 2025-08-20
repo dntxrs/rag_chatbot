@@ -274,6 +274,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # GANTI SELURUH FUNGSI export_chat ANDA DENGAN VERSI FINAL DAN PALING STABIL INI
 # ==============================================================================
 
+# =================================================================================
+# KODE FINAL - PENDEKATAN MANUAL UNTUK MENGHINDARI BUG FPDF INTERNAL
+# Ganti seluruh fungsi export_chat Anda dengan yang ini.
+# =================================================================================
+
 async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     chat_history = context.user_data.get('history', [])
@@ -282,80 +287,74 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Riwayat percakapan masih kosong.")
         return
 
-    await update.message.reply_text("Mempersiapkan file PDF...")
+    await update.message.reply_text("Mempersiapkan file PDF (menggunakan metode rendering manual)...")
 
     try:
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Helvetica", size=11)
-
-        # Dapatkan lebar halaman yang bisa ditulis (lebar total - margin kiri - margin kanan)
-        # Ini adalah kunci agar perhitungan kita akurat
-        printable_width = pdf.w - pdf.l_margin - pdf.r_margin
-
-        # --- FUNGSI BANTUAN BARU YANG LEBIH CERDAS ---
-        def create_safe_text(text_input):
+        
+        # --- FUNGSI UTAMA YANG BARU: MENULIS TEKS SECARA MANUAL ---
+        def write_manually(text, line_height=7):
             """
-            Fungsi ini memformat teks agar aman untuk multi_cell dengan
-            menggunakan get_string_width() untuk presisi.
+            Fungsi ini menggantikan multi_cell sepenuhnya.
+            Ia mengukur dan menulis teks baris per baris secara manual.
             """
-            processed_lines = []
-            # Bersihkan teks dari karakter yang tidak bisa dicetak
-            safe_text = text_input.encode('latin-1', 'replace').decode('latin-1')
+            # Lebar area yang bisa ditulis di halaman
+            available_width = pdf.w - pdf.l_margin - pdf.r_margin
             
-            for line in safe_text.split('\n'): # Proses baris per baris jika ada line break asli
-                words = line.split(' ')
-                current_line = ""
-                for word in words:
-                    # Cek apakah kata itu sendiri sudah lebih panjang dari halaman
-                    if pdf.get_string_width(word) > printable_width:
-                        # Jika ya, potong-potong kata tersebut
-                        temp_word = ""
-                        for char in word:
-                            if pdf.get_string_width(temp_word + char) > printable_width:
-                                processed_lines.append(temp_word)
-                                temp_word = char
-                            else:
-                                temp_word += char
-                        current_line = temp_word # Sisa dari kata yang dipotong
-                        continue
+            # Bersihkan teks dari karakter aneh
+            safe_text = text.encode('latin-1', 'replace').decode('latin-1')
+            words = safe_text.split(' ')
+            
+            current_line = ""
+            for word in words:
+                # Cek dulu: apakah kata ini sendiri lebih panjang dari halaman?
+                word_width = pdf.get_string_width(word)
+                if word_width > available_width:
+                    # Jika buffer tidak kosong, cetak dulu
+                    if current_line:
+                        pdf.cell(0, line_height, txt=current_line, ln=1)
+                        current_line = ""
+                    
+                    # Potong-potong kata monster ini karakter per karakter
+                    temp_word = ""
+                    for char in word:
+                        if pdf.get_string_width(temp_word + char) > available_width:
+                            pdf.cell(0, line_height, txt=temp_word, ln=1)
+                            temp_word = char
+                        else:
+                            temp_word += char
+                    current_line = temp_word # Sisa dari kata yang dipotong
+                    continue
 
-                    # Cek apakah menambahkan kata baru akan melebihi batas
-                    if pdf.get_string_width(current_line + ' ' + word) <= printable_width:
-                        current_line += ' ' + word if current_line else word
-                    else:
-                        # Jika melebihi, simpan baris saat ini dan mulai baris baru
-                        processed_lines.append(current_line)
-                        current_line = word
-                
-                # Jangan lupa simpan sisa baris terakhir
-                if current_line:
-                    processed_lines.append(current_line)
+                # Cek apakah menambahkan kata baru akan melebihi batas
+                separator = ' ' if current_line else ''
+                if pdf.get_string_width(current_line + separator + word) > available_width:
+                    # Baris sudah penuh, cetak baris saat ini
+                    pdf.cell(0, line_height, txt=current_line, ln=1)
+                    current_line = word # Mulai baris baru dengan kata ini
+                else:
+                    # Masih ada tempat, tambahkan kata ke baris saat ini
+                    current_line += separator + word
+            
+            # Cetak baris terakhir yang tersisa di buffer
+            if current_line:
+                pdf.cell(0, line_height, txt=current_line, ln=1)
+        # --- AKHIR FUNGSI BANTUAN ---
 
-            return "\n".join(processed_lines)
-        # --------------------------------------------------
-
-        # Judul
+        # Mulai menulis dokumen
         pdf.set_font("Helvetica", 'B', 12)
-        pdf.cell(0, 10, text="Riwayat Percakapan Chatbot", align='C')
-        pdf.ln(10)
+        pdf.cell(0, 10, text="Riwayat Percakapan Chatbot", align='C', ln=1)
+        pdf.ln(5)
 
         for item in chat_history:
-            # Siapkan teks mentah
-            question_text = f"Anda: {item['question']}"
-            answer_text = f"Bot: {item['answer']}"
-
-            # Gunakan fungsi cerdas kita untuk memformat teks dengan aman
-            final_question = create_safe_text(question_text)
-            final_answer = create_safe_text(answer_text)
-
-            # Tulis ke PDF
+            # Menggunakan fungsi manual kita
             pdf.set_font("Helvetica", 'B', 11)
-            pdf.multi_cell(0, 7, text=final_question)
+            write_manually(f"Anda: {item['question']}")
             
             pdf.set_font("Helvetica", '', 11)
-            pdf.multi_cell(0, 7, text=final_answer)
-            pdf.ln(5)
+            write_manually(f"Bot: {item['answer']}")
+            pdf.ln(5) # Spasi antar entri chat
 
         file_path = f"history_{user_id}.pdf"
         pdf.output(file_path)
@@ -365,9 +364,12 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(file_path)
 
     except Exception as e:
-        error_message = f"Gagal membuat PDF: {str(e)}"
-        print(f"ERROR PDF EXPORT: {error_message}") # Untuk debugging di log Anda
-        await update.message.reply_text(error_message)
+        # Jika ini masih gagal, kita akan tahu teks mana yang jadi penyebabnya
+        print("="*20, "FATAL PDF ERROR", "="*20)
+        print(f"Gagal pada item: {item}") # Mencetak item terakhir yang diproses
+        print(f"Error: {e}")
+        print("="*50)
+        await update.message.reply_text(f"Gagal total membuat PDF dengan metode manual: {e}")
 
 async def list_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)

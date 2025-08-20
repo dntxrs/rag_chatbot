@@ -269,28 +269,52 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     chat_history = context.user_data.get('history', [])
+
     if not chat_history:
         await update.message.reply_text("Riwayat percakapan masih kosong.")
         return
+
     await update.message.reply_text("Mempersiapkan file PDF...")
     try:
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", size=12)
+        # Menambahkan font yang mendukung unicode (untuk karakter aneh)
+        # Anda mungkin perlu men-download font seperti DejaVuSans.ttf ke environment Anda
+        try:
+            pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
+            pdf.set_font('DejaVu', size=12)
+        except RuntimeError:
+            print("Font DejaVu tidak ditemukan, menggunakan Arial (mungkin ada error karakter).")
+            pdf.set_font("Arial", size=12)
+        
         pdf.cell(0, 10, txt="Riwayat Percakapan Chatbot", ln=True, align='C')
         pdf.ln(10)
+
         for item in chat_history:
-            pdf.set_font("Arial", 'B', 12)
-            pdf.multi_cell(0, 7, f"Anda: {item['question'].encode('latin-1', 'replace').decode('latin-1')}")
-            pdf.set_font("Arial", '', 12)
-            pdf.multi_cell(0, 7, f"Bot: {item['answer'].encode('latin-1', 'replace').decode('latin-1')}")
+            # --- PERBAIKAN DI SINI ---
+            # Batasi panjang teks untuk mencegah error
+            question = item['question']
+            answer = item['answer']
+            
+            safe_question = (question[:1500] + '...') if len(question) > 1500 else question
+            safe_answer = (answer[:1500] + '...') if len(answer) > 1500 else answer
+
+            # Menggunakan teks yang sudah aman
+            pdf.set_font(style='B')
+            pdf.multi_cell(0, 7, f"Anda: {safe_question}")
+            pdf.set_font(style='')
+            pdf.multi_cell(0, 7, f"Bot: {safe_answer}")
             pdf.ln(5)
+
         file_path = f"history_{user_id}.pdf"
         pdf.output(file_path)
+        
         with open(file_path, 'rb') as f:
             await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
         os.remove(file_path)
-    except Exception as e: await update.message.reply_text(f"Gagal membuat PDF: {e}")
+
+    except Exception as e:
+        await update.message.reply_text(f"Gagal membuat PDF: {e}")
 
 async def list_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)

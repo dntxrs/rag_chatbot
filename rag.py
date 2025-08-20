@@ -369,11 +369,12 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Tidak ada proses unggah yang sedang berjalan.")
 
 # 5. FUNGSI UTAMA UNTUK MENJALANKAN BOT
+# 5. FUNGSI UTAMA UNTUK MENJALANKAN BOT
 def main():
-    print("Bot versi final (stabil & siap deploy) sedang disiapkan...")
+    print("Bot sedang disiapkan...")
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
-    # Daftarkan semua handler
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("list_docs", list_docs))
     application.add_handler(CommandHandler("delete_doc", delete_doc))
@@ -382,9 +383,16 @@ def main():
     application.add_handler(CommandHandler("export", export_chat))
     application.add_handler(CommandHandler("fokus", set_focus))
     application.add_handler(CommandHandler("hapus_fokus", remove_focus))
+    application.add_handler(CommandHandler("summarize", summarize_document)) 
     
-    application.add_handler(MessageHandler(filters.Document.PDF | filters.Document.TXT | filters.Document.DOCX, handle_document))
+    application.add_handler(MessageHandler(
+        filters.Document.PDF | filters.Document.TXT | filters.Document.DOCX, 
+        handle_document
+    ))
+    
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+
     
     print("Bot siap menerima pesan!")
     application.run_polling()

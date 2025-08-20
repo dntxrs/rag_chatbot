@@ -276,41 +276,50 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text("Mempersiapkan file PDF...")
+    
+    # --- FUNGSI BANTUAN UNTUK MEMECAH TEKS PANJANG ---
+    def force_wrap_text(text):
+        """Memecah kata yang sangat panjang agar tidak menyebabkan error FPDF."""
+        # Batas aman karakter per baris untuk font standar
+        max_line_length = 90  
+        words = text.split(' ')
+        processed_words = []
+        for word in words:
+            if len(word) > max_line_length:
+                # Jika ada kata yang terlalu panjang (misal: URL, token), pecah paksa
+                for i in range(0, len(word), max_line_length):
+                    processed_words.append(word[i:i+max_line_length])
+            else:
+                processed_words.append(word)
+        return ' '.join(processed_words)
+    # ----------------------------------------------------
+
     try:
         pdf = FPDF()
         pdf.add_page()
-
-        # --- PERBAIKAN UTAMA DI SINI ---
-        # 1. Tambahkan font Unicode. Pastikan file 'dejavu-sans.ttf' ada.
-        # Nama 'DejaVu' adalah alias yang akan Anda gunakan dalam kode.
-        try:
-            pdf.add_font('DejaVu', '', 'dejavu-sans.ttf', uni=True)
-        except RuntimeError:
-            # Fallback jika font tidak ditemukan, kirim pesan error yang jelas
-            await update.message.reply_text("Error: File font 'dejavu-sans.ttf' tidak ditemukan. Gagal membuat PDF.")
-            return
-            
-        # 2. Atur font utama ke font baru tersebut
-        pdf.set_font('DejaVu', '', 12)
-
+        # Kita kembali menggunakan font bawaan yang aman
+        pdf.set_font("Helvetica", size=12)
+        
         # Judul
-        pdf.cell(0, 10, text="Riwayat Percakapan Chatbot", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-        pdf.ln(5)
+        pdf.cell(0, 10, text="Riwayat Percakapan Chatbot", align='C')
+        pdf.ln(10) # Beri jarak setelah judul
 
         for item in chat_history:
-            question = item['question']
-            answer = item['answer']
+            # Gunakan fungsi bantuan untuk "membersihkan" teks sebelum dicetak
+            question = force_wrap_text(item['question'])
+            answer = force_wrap_text(item['answer'])
 
-            # 3. Hapus .encode().decode() karena font sudah mendukung UTF-8
-            # Teks sekarang bisa langsung ditulis
-            
+            # Kembali menggunakan encode-decode untuk menangani karakter aneh
+            safe_question = question.encode('latin-1', 'replace').decode('latin-1')
+            safe_answer = answer.encode('latin-1', 'replace').decode('latin-1')
+
             # Pertanyaan Pengguna
-            pdf.set_font('DejaVu', 'B', 11) # 'B' untuk Bold
-            pdf.multi_cell(0, 7, text=f"Anda: {question}")
+            pdf.set_font("Helvetica", 'B', 11) # 'B' untuk Bold
+            pdf.multi_cell(0, 7, text=f"Anda: {safe_question}")
             
             # Jawaban Bot
-            pdf.set_font('DejaVu', '', 11) # Font reguler
-            pdf.multi_cell(0, 7, text=f"Bot: {answer}")
+            pdf.set_font("Helvetica", '', 11) # Font reguler
+            pdf.multi_cell(0, 7, text=f"Bot: {safe_answer}")
             pdf.ln(5)
 
         file_path = f"history_{user_id}.pdf"
@@ -321,9 +330,8 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(file_path)
 
     except Exception as e:
-        # Berikan pesan error yang lebih spesifik
         error_message = f"Gagal membuat PDF: {str(e)}"
-        print(error_message) # Cetak ke konsol untuk debugging
+        print(error_message) # Cetak ke konsol untuk debugging Anda
         await update.message.reply_text(error_message)
 
 async def list_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):

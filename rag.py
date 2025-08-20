@@ -20,6 +20,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 import nest_asyncio
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
+from fpdf.enums import XPos, YPos
 
 nest_asyncio.apply()
 
@@ -280,7 +281,7 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pdf.add_page()
         pdf.set_font("Helvetica", size=12) # Menggunakan font standar yang aman
         
-        # --- PERBAIKAN DI SINI ---
+        # --- PERBAIKAN DI SINI (SEKARANG BERFUNGSI SETELAH IMPORT) ---
         # Menggunakan parameter 'text' dan 'new_x', 'new_y'
         pdf.cell(0, 10, text="Riwayat Percakapan Chatbot", 
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')

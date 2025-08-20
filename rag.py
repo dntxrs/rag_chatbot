@@ -139,7 +139,7 @@ async def process_and_store_pdf(update: Update, context: ContextTypes.DEFAULT_TY
 
 def find_relevant_chunks(question: str, user_id: str, focused_file: str = None) -> list:
     embedding_list = genai.embed_content(model=embedding_model_name, content=question, task_type="RETRIEVAL_QUERY")['embedding']
-    params = {'query_embedding': embedding_list, 'user_id_input': user_id, 'match_threshold': 0.3, 'match_count': 5}
+    params = {'query_embedding': embedding_list, 'user_id_input': user_id, 'match_threshold': 0.4, 'match_count': 5}
     function_name = 'match_documents'
     if focused_file:
         function_name = 'match_documents_by_file'
@@ -367,6 +367,28 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Sinyal pembatalan terkirim...")
     else:
         await update.message.reply_text("Tidak ada proses unggah yang sedang berjalan.")
+        
+async def summarize_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    await update.message.reply_text("Membuat ringkasan dari semua dokumen...")
+    try:
+    
+        response = supabase.table('documents').select('content').eq('user_id', user_id).limit(100).execute()
+        
+        if not response.data:
+            await update.message.reply_text("Tidak ada dokumen yang bisa diringkas.")
+            return
+
+        full_text = " ".join([item['content'] for item in response.data])
+
+       
+        prompt = f"Buat ringkasan eksekutif yang padat dan informatif dari semua teks berikut:\n---\n{full_text[:20000]}\n---"
+
+        summary_response = generative_model.generate_content(prompt)
+        await update.message.reply_text(html.escape(summary_response.text))
+
+    except Exception as e:
+        await update.message.reply_text(f"Gagal membuat ringkasan: {html.escape(str(e))}")
 
 # 5. FUNGSI UTAMA UNTUK MENJALANKAN BOT
 # 5. FUNGSI UTAMA UNTUK MENJALANKAN BOT

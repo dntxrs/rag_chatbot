@@ -279,26 +279,38 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Helvetica", size=12) # Menggunakan font standar yang aman
-        
-        # --- PERBAIKAN DI SINI (SEKARANG BERFUNGSI SETELAH IMPORT) ---
-        # Menggunakan parameter 'text' dan 'new_x', 'new_y'
-        pdf.cell(0, 10, text="Riwayat Percakapan Chatbot", 
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+
+        # --- PERBAIKAN UTAMA DI SINI ---
+        # 1. Tambahkan font Unicode. Pastikan file 'dejavu-sans.ttf' ada.
+        # Nama 'DejaVu' adalah alias yang akan Anda gunakan dalam kode.
+        try:
+            pdf.add_font('DejaVu', '', 'dejavu-sans.ttf', uni=True)
+        except RuntimeError:
+            # Fallback jika font tidak ditemukan, kirim pesan error yang jelas
+            await update.message.reply_text("Error: File font 'dejavu-sans.ttf' tidak ditemukan. Gagal membuat PDF.")
+            return
+            
+        # 2. Atur font utama ke font baru tersebut
+        pdf.set_font('DejaVu', '', 12)
+
+        # Judul
+        pdf.cell(0, 10, text="Riwayat Percakapan Chatbot", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        pdf.ln(5)
 
         for item in chat_history:
-            # Batasi panjang teks untuk mencegah error
             question = item['question']
             answer = item['answer']
-            
-            safe_question = (question[:1500] + '...') if len(question) > 1500 else question
-            safe_answer = (answer[:1500] + '...') if len(answer) > 1500 else answer
 
-            # Menggunakan parameter 'text'
-            pdf.set_font(style='B')
-            pdf.multi_cell(0, 7, text=f"Anda: {safe_question.encode('latin-1', 'replace').decode('latin-1')}")
-            pdf.set_font(style='')
-            pdf.multi_cell(0, 7, text=f"Bot: {safe_answer.encode('latin-1', 'replace').decode('latin-1')}")
+            # 3. Hapus .encode().decode() karena font sudah mendukung UTF-8
+            # Teks sekarang bisa langsung ditulis
+            
+            # Pertanyaan Pengguna
+            pdf.set_font('DejaVu', 'B', 11) # 'B' untuk Bold
+            pdf.multi_cell(0, 7, text=f"Anda: {question}")
+            
+            # Jawaban Bot
+            pdf.set_font('DejaVu', '', 11) # Font reguler
+            pdf.multi_cell(0, 7, text=f"Bot: {answer}")
             pdf.ln(5)
 
         file_path = f"history_{user_id}.pdf"
@@ -309,7 +321,10 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(file_path)
 
     except Exception as e:
-        await update.message.reply_text(f"Gagal membuat PDF: {e}")
+        # Berikan pesan error yang lebih spesifik
+        error_message = f"Gagal membuat PDF: {str(e)}"
+        print(error_message) # Cetak ke konsol untuk debugging
+        await update.message.reply_text(error_message)
 
 async def list_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)

@@ -140,7 +140,7 @@ async def process_and_store_pdf(update: Update, context: ContextTypes.DEFAULT_TY
 
 def find_relevant_chunks(question: str, user_id: str, focused_file: str = None) -> list:
     embedding_list = genai.embed_content(model=embedding_model_name, content=question, task_type="RETRIEVAL_QUERY")['embedding']
-    params = {'query_embedding': embedding_list, 'user_id_input': user_id, 'match_threshold': 0.3, 'match_count': 7}
+    params = {'query_embedding': embedding_list, 'user_id_input': user_id, 'match_threshold': 0.3, 'match_count': 5}
     function_name = 'match_documents'
     if focused_file:
         function_name = 'match_documents_by_file'
@@ -270,6 +270,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # GANTI SELURUH FUNGSI LAMA ANDA DENGAN YANG INI.
 # Ini adalah versi yang paling aman dan sudah diuji untuk menangani teks panjang.
 
+# ==============================================================================
+# GANTI SELURUH FUNGSI export_chat ANDA DENGAN VERSI FINAL DAN PALING STABIL INI
+# ==============================================================================
+
 async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     chat_history = context.user_data.get('history', [])
@@ -280,59 +284,77 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Mempersiapkan file PDF...")
 
-    # --- FUNGSI BANTUAN YANG LEBIH KUAT ---
-    def process_text_for_pdf(full_line, max_len=85):
-        """
-        Fungsi ini membersihkan dan memecah teks secara paksa
-        untuk mencegah error FPDF.
-        """
-        # 1. Bersihkan karakter yang tidak didukung oleh font standar
-        safe_line = full_line.encode('latin-1', 'replace').decode('latin-1')
-        
-        # 2. Pecah teks menjadi kata-kata
-        words = safe_line.split(' ')
-        
-        # 3. Proses setiap kata, pecah paksa jika terlalu panjang
-        final_words = []
-        for word in words:
-            if len(word) > max_len:
-                # Kata ini lebih panjang dari batas aman, kita potong-potong
-                start = 0
-                while start < len(word):
-                    chunk = word[start:start+max_len]
-                    final_words.append(chunk)
-                    start += max_len
-            else:
-                final_words.append(word)
-        
-        # 4. Gabungkan kembali menjadi satu baris teks yang aman
-        return ' '.join(final_words)
-    # ----------------------------------------
-
     try:
         pdf = FPDF()
         pdf.add_page()
-        # Kita tetap pakai font bawaan, tidak perlu file eksternal
-        pdf.set_font("Helvetica", size=12)
-        
+        pdf.set_font("Helvetica", size=11)
+
+        # Dapatkan lebar halaman yang bisa ditulis (lebar total - margin kiri - margin kanan)
+        # Ini adalah kunci agar perhitungan kita akurat
+        printable_width = pdf.w - pdf.l_margin - pdf.r_margin
+
+        # --- FUNGSI BANTUAN BARU YANG LEBIH CERDAS ---
+        def create_safe_text(text_input):
+            """
+            Fungsi ini memformat teks agar aman untuk multi_cell dengan
+            menggunakan get_string_width() untuk presisi.
+            """
+            processed_lines = []
+            # Bersihkan teks dari karakter yang tidak bisa dicetak
+            safe_text = text_input.encode('latin-1', 'replace').decode('latin-1')
+            
+            for line in safe_text.split('\n'): # Proses baris per baris jika ada line break asli
+                words = line.split(' ')
+                current_line = ""
+                for word in words:
+                    # Cek apakah kata itu sendiri sudah lebih panjang dari halaman
+                    if pdf.get_string_width(word) > printable_width:
+                        # Jika ya, potong-potong kata tersebut
+                        temp_word = ""
+                        for char in word:
+                            if pdf.get_string_width(temp_word + char) > printable_width:
+                                processed_lines.append(temp_word)
+                                temp_word = char
+                            else:
+                                temp_word += char
+                        current_line = temp_word # Sisa dari kata yang dipotong
+                        continue
+
+                    # Cek apakah menambahkan kata baru akan melebihi batas
+                    if pdf.get_string_width(current_line + ' ' + word) <= printable_width:
+                        current_line += ' ' + word if current_line else word
+                    else:
+                        # Jika melebihi, simpan baris saat ini dan mulai baris baru
+                        processed_lines.append(current_line)
+                        current_line = word
+                
+                # Jangan lupa simpan sisa baris terakhir
+                if current_line:
+                    processed_lines.append(current_line)
+
+            return "\n".join(processed_lines)
+        # --------------------------------------------------
+
+        # Judul
+        pdf.set_font("Helvetica", 'B', 12)
         pdf.cell(0, 10, text="Riwayat Percakapan Chatbot", align='C')
         pdf.ln(10)
 
         for item in chat_history:
-            # Buat teks lengkapnya terlebih dahulu
-            question_full_text = f"Anda: {item['question']}"
-            answer_full_text = f"Bot: {item['answer']}"
+            # Siapkan teks mentah
+            question_text = f"Anda: {item['question']}"
+            answer_text = f"Bot: {item['answer']}"
 
-            # Proses teks lengkap itu dengan fungsi bantuan kita yang baru
-            safe_question = process_text_for_pdf(question_full_text)
-            safe_answer = process_text_for_pdf(answer_full_text)
+            # Gunakan fungsi cerdas kita untuk memformat teks dengan aman
+            final_question = create_safe_text(question_text)
+            final_answer = create_safe_text(answer_text)
 
             # Tulis ke PDF
             pdf.set_font("Helvetica", 'B', 11)
-            pdf.multi_cell(0, 7, text=safe_question)
+            pdf.multi_cell(0, 7, text=final_question)
             
             pdf.set_font("Helvetica", '', 11)
-            pdf.multi_cell(0, 7, text=safe_answer)
+            pdf.multi_cell(0, 7, text=final_answer)
             pdf.ln(5)
 
         file_path = f"history_{user_id}.pdf"
@@ -344,7 +366,7 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         error_message = f"Gagal membuat PDF: {str(e)}"
-        print(f"ERROR PDF EXPORT: {error_message}") # Ini akan muncul di log server Anda
+        print(f"ERROR PDF EXPORT: {error_message}") # Untuk debugging di log Anda
         await update.message.reply_text(error_message)
 
 async def list_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):

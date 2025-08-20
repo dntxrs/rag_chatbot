@@ -278,20 +278,14 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         pdf = FPDF()
         pdf.add_page()
-        # Menambahkan font yang mendukung unicode (untuk karakter aneh)
-        # Anda mungkin perlu men-download font seperti DejaVuSans.ttf ke environment Anda
-        try:
-            pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
-            pdf.set_font('DejaVu', size=12)
-        except RuntimeError:
-            print("Font DejaVu tidak ditemukan, menggunakan Arial (mungkin ada error karakter).")
-            pdf.set_font("Arial", size=12)
+        pdf.set_font("Helvetica", size=12) # Menggunakan font standar yang aman
         
-        pdf.cell(0, 10, txt="Riwayat Percakapan Chatbot", ln=True, align='C')
-        pdf.ln(10)
+        # --- PERBAIKAN DI SINI ---
+        # Menggunakan parameter 'text' dan 'new_x', 'new_y'
+        pdf.cell(0, 10, text="Riwayat Percakapan Chatbot", 
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
 
         for item in chat_history:
-            # --- PERBAIKAN DI SINI ---
             # Batasi panjang teks untuk mencegah error
             question = item['question']
             answer = item['answer']
@@ -299,11 +293,11 @@ async def export_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             safe_question = (question[:1500] + '...') if len(question) > 1500 else question
             safe_answer = (answer[:1500] + '...') if len(answer) > 1500 else answer
 
-            # Menggunakan teks yang sudah aman
+            # Menggunakan parameter 'text'
             pdf.set_font(style='B')
-            pdf.multi_cell(0, 7, f"Anda: {safe_question}")
+            pdf.multi_cell(0, 7, text=f"Anda: {safe_question.encode('latin-1', 'replace').decode('latin-1')}")
             pdf.set_font(style='')
-            pdf.multi_cell(0, 7, f"Bot: {safe_answer}")
+            pdf.multi_cell(0, 7, text=f"Bot: {safe_answer.encode('latin-1', 'replace').decode('latin-1')}")
             pdf.ln(5)
 
         file_path = f"history_{user_id}.pdf"
@@ -328,16 +322,40 @@ async def list_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(message, parse_mode=ParseMode.HTML)
     except Exception as e: await update.message.reply_text(f"Error: {e}")
 
+# GANTI FUNGSI LAMA ANDA DENGAN VERSI YANG SUDAH DIPERBAIKI INI
+
 async def delete_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     try:
-        file_name = " ".join(context.args)
-        if not file_name:
-            await update.message.reply_text("Gunakan: /delete_doc <code>nama_file.pdf</code>", parse_mode=ParseMode.HTML)
+        # --- PERBAIKAN 1: Cara baru mengambil nama file ---
+        # Mengambil semua teks setelah '/delete_doc '
+        command = "/delete_doc "
+        full_text = update.message.text
+        # Pastikan pesan dimulai dengan perintah, lalu ambil sisanya
+        if full_text.startswith(command):
+            file_name_to_delete = full_text[len(command):].strip()
+        else:
+            # Fallback jika ada masalah, meskipun seharusnya tidak terjadi
+            file_name_to_delete = " ".join(context.args)
+
+        if not file_name_to_delete:
+            await update.message.reply_text("Gunakan: /delete_doc <code>nama_file_lengkap.pdf</code>", parse_mode=ParseMode.HTML)
             return
-        supabase.table('documents').delete().eq('user_id', user_id).eq('file_name', file_name).execute()
-        await update.message.reply_text(f"Dokumen '<code>{html.escape(file_name)}</code>' telah dihapus.", parse_mode=ParseMode.HTML)
-    except Exception as e: await update.message.reply_text(f"Error: {e}")
+
+        await update.message.reply_text(f"Mencari dan menghapus '<code>{html.escape(file_name_to_delete)}</code>'...", parse_mode=ParseMode.HTML)
+        
+        # --- PERBAIKAN 2: Cek hasil penghapusan ---
+        # Menambahkan count='exact' untuk mendapatkan jumlah baris yang dihapus
+        response = supabase.table('documents').delete(count='exact').eq('user_id', user_id).eq('file_name', file_name_to_delete).execute()
+
+        # Periksa apakah ada baris yang benar-benar terhapus
+        if response.count > 0:
+            await update.message.reply_text(f"✅ Dokumen '<code>{html.escape(file_name_to_delete)}</code>' berhasil dihapus.", parse_mode=ParseMode.HTML)
+        else:
+            await update.message.reply_text(f"⚠️ Dokumen '<code>{html.escape(file_name_to_delete)}</code>' tidak ditemukan.", parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        await update.message.reply_text(f"Terjadi kesalahan: {e}")
 
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop('history', None)
